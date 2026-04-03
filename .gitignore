@@ -32,6 +32,9 @@ build/
 ### VS Code ###
 .vscode/
 
+.env
 .claude/
 CLAUDE.md
 *.docx
+
+application-local.properties
