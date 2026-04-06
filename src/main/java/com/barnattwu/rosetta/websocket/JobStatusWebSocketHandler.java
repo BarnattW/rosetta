@@ -38,7 +38,7 @@ public class JobStatusWebSocketHandler extends TextWebSocketHandler {
         UUID userId = jwtUtil.getUserId(token);
 
         Job job = jobRepository.findById(UUID.fromString(jobId)).orElse(null);
-        if (job == null || !job.getId().equals(userId)) {
+        if (job == null || !job.getUser().getId().equals(userId)) {
             session.close(CloseStatus.POLICY_VIOLATION);
             return;
         }

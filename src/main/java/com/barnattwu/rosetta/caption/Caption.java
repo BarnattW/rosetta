@@ -3,6 +3,7 @@ package com.barnattwu.rosetta.caption;
 import java.util.UUID;
 
 import com.barnattwu.rosetta.job.Job;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -22,6 +23,7 @@ public class Caption {
   @GeneratedValue(strategy = GenerationType.UUID)
   private UUID id;
 
+  @JsonIgnore
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "job_id", nullable = false)
   private Job job;
