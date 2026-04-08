@@ -4,10 +4,14 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openai.client.OpenAIClient;
+import com.openai.models.audio.AudioResponseFormat;
 import com.openai.models.audio.transcriptions.TranscriptionCreateParams;
 
 import software.amazon.awssdk.services.s3.S3Client;
@@ -31,7 +35,7 @@ public class TranscriptionService {
                 .bucket(bucket)
                 .key(storageKey)
                 .build();
-            
+
             try (InputStream inputStream = s3Client.getObject(getObjectRequest)) {
                 Files.copy(inputStream, tempFile, StandardCopyOption.REPLACE_EXISTING);
             }
@@ -39,14 +43,29 @@ public class TranscriptionService {
             TranscriptionCreateParams params = TranscriptionCreateParams.builder()
                 .model("whisper-1")
                 .file(tempFile)
+                .responseFormat(AudioResponseFormat.VERBOSE_JSON)
                 .build();
-            
-            String transcript = openAIClient.audio().transcriptions().create(params).asTranscription().text();
+
+            var verbose = openAIClient.audio().transcriptions().create(params).asVerbose();
+            var segments = verbose.segments().orElseThrow(() -> new RuntimeException("No segments returned from Whisper"));
+
+            List<TranscriptionSegment> result = new ArrayList<>();
+            for (int i = 0; i < segments.size(); i++) {
+                var seg = segments.get(i);
+                result.add(new TranscriptionSegment(
+                    i,
+                    (long)(seg.start() * 1000),
+                    (long)(seg.end() * 1000),
+                    seg.text().trim()
+                ));
+            }
 
             Files.deleteIfExists(tempFile);
-            return transcript;
+            return new ObjectMapper().writeValueAsString(result);
         } catch (Exception e) {
             throw new RuntimeException("Failed to transcribe audio: " + e.getMessage(), e);
         }
     }
+
+    public record TranscriptionSegment(int index, long startTime, long endTime, String text) {}
 }

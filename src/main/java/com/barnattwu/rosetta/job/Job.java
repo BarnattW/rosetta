@@ -1,6 +1,8 @@
 package com.barnattwu.rosetta.job;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import org.hibernate.annotations.JdbcTypeCode;
@@ -8,7 +10,9 @@ import org.hibernate.type.SqlTypes;
 
 import com.barnattwu.rosetta.user.User;
 
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -40,8 +44,13 @@ public class Job {
     @Column
     private String sourceLanguage;
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "job_target_languages", joinColumns = @JoinColumn(name = "job_id"))
+    @Column(name = "language")
+    private List<String> targetLanguages = new ArrayList<>();
+
     @Column
-    private String targetLanguage;
+    private String title;
 
     @Column
     private String videoStorageKey;
@@ -63,77 +72,34 @@ public class Job {
         createdAt = Instant.now();
     }
 
-    public UUID getId() {
-        return id;
-    }
+    public UUID getId() { return id; }
 
-    public User getUser() {
-        return user;
-    }
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
 
-    public void setUser(User user) {
-        this.user = user;
-    }
+    public JobStatus getStatus() { return status; }
+    public void setStatus(JobStatus status) { this.status = status; }
 
-    public JobStatus getStatus() {
-        return status;
-    }
+    public String getSourceLanguage() { return sourceLanguage; }
+    public void setSourceLanguage(String sourceLanguage) { this.sourceLanguage = sourceLanguage; }
 
-    public void setStatus(JobStatus status) {
-        this.status = status;
-    }
+    public List<String> getTargetLanguages() { return targetLanguages; }
+    public void setTargetLanguages(List<String> targetLanguages) { this.targetLanguages = targetLanguages; }
 
-    public String getSourceLanguage() {
-        return sourceLanguage;
-    }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
 
-    public void setSourceLanguage(String sourceLanguage) {
-        this.sourceLanguage = sourceLanguage;
-    }
+    public String getVideoStorageKey() { return videoStorageKey; }
+    public void setVideoStorageKey(String videoStorageKey) { this.videoStorageKey = videoStorageKey; }
 
-    public String getTargetLanguage() {
-        return targetLanguage;
-    }
+    public int getTokensUsed() { return tokensUsed; }
+    public void setTokensUsed(int tokensUsed) { this.tokensUsed = tokensUsed; }
 
-    public void setTargetLanguage(String targetLanguage) {
-        this.targetLanguage = targetLanguage;
-    }
+    public String getErrorMessage() { return errorMessage; }
+    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
 
-    public String getVideoStorageKey() {
-        return videoStorageKey;
-    }
+    public Instant getCreatedAt() { return createdAt; }
 
-    public void setVideoStorageKey(String videoStorageKey) {
-        this.videoStorageKey = videoStorageKey;
-    }
-
-    public int getTokensUsed() {
-        return tokensUsed;
-    }
-
-    public void setTokensUsed(int tokensUsed) {
-        this.tokensUsed = tokensUsed;
-    }
-
-    public String getErrorMessage() {
-        return errorMessage;
-    }
-
-    public void setErrorMessage(String errorMessage) {
-        this.errorMessage = errorMessage;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getCompletedAt() {
-        return completedAt;
-    }
-
-    public void setCompletedAt(Instant completedAt) {
-        this.completedAt = completedAt;
-    }
-
-    
+    public Instant getCompletedAt() { return completedAt; }
+    public void setCompletedAt(Instant completedAt) { this.completedAt = completedAt; }
 }

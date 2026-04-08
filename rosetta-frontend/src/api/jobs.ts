@@ -10,9 +10,10 @@ export type JobStatus =
 
 export interface Job {
   id: string
+  title: string | null
   status: JobStatus
   sourceLanguage: string
-  targetLanguage: string
+  targetLanguages: string[]
   createdAt: string
   completedAt: string | null
   errorMessage: string | null
@@ -28,10 +29,12 @@ export const jobsApi = {
 
   get: (jobId: string) => api.get<Job>(`/api/jobs/${jobId}`),
 
-  create: (sourceLanguage: string, targetLanguage: string, fileName: string) =>
-    api.post<CreateJobResponse>('/api/jobs', { sourceLanguage, targetLanguage, fileName }),
+  create: (sourceLanguage: string, targetLanguages: string[], fileName: string) =>
+    api.post<CreateJobResponse>('/api/jobs', { sourceLanguage, targetLanguages, fileName }),
 
   start: (jobId: string) => api.post(`/api/jobs/${jobId}/start`),
 
   delete: (jobId: string) => api.delete(`/api/jobs/${jobId}`),
+
+  getVideoUrl: (jobId: string) => api.get<string>(`/api/jobs/${jobId}/video-url`),
 }

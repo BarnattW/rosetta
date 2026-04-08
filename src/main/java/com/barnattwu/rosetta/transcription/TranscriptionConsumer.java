@@ -34,22 +34,27 @@ public class TranscriptionConsumer {
 
   @KafkaListener(topics = "job.created", groupId = "transcription-service")
   public void onJobCreated(String jobId) {
-    Job job = jobRepository.findById(UUID.fromString(jobId))
-      .orElseThrow(() -> new RuntimeException("Job not found: " + jobId));
+    Job job = null;
+    try {
+      job = jobRepository.findById(UUID.fromString(jobId))
+        .orElseThrow(() -> new RuntimeException("Job not found: " + jobId));
 
-      try {
-        String transcript = transcriptionService.transcribe(job.getVideoStorageKey(), "rosetta-videos");
-        
-        redisTemplate.opsForValue().set("transcript:" + jobId, transcript, Duration.ofHours(1));
-        job.setStatus(JobStatus.TRANSLATING);
-        job.setErrorMessage(null);
-        jobRepository.save(job);
-        jobEventPublisher.publishJobTranscribed(job.getId());
-      } catch (Exception e) {
-        job.setStatus(JobStatus.FAILED);
-        job.setErrorMessage(e.getMessage());
-        jobRepository.save(job);
-        jobEventPublisher.publishJobFailed(job.getId());
-      }
+      String transcript = transcriptionService.transcribe(job.getVideoStorageKey(), "rosetta-videos");
+
+      if (!jobRepository.existsById(job.getId())) return; // deleted while transcribing
+
+      redisTemplate.opsForValue().set("transcript:" + jobId, transcript, Duration.ofHours(1));
+      job.setStatus(JobStatus.TRANSLATING);
+      job.setErrorMessage(null);
+      jobRepository.save(job);
+      jobEventPublisher.publishJobTranscribed(job.getId());
+    } catch (Exception e) {
+      if (job == null) return;
+      if (!jobRepository.existsById(job.getId())) return;
+      job.setStatus(JobStatus.FAILED);
+      job.setErrorMessage(e.getMessage());
+      jobRepository.save(job);
+      jobEventPublisher.publishJobFailed(job.getId());
+    }
   }
 }

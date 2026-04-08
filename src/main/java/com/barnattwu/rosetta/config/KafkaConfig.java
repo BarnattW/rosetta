@@ -21,6 +21,7 @@ import org.springframework.kafka.core.ProducerFactory;
 @EnableKafka
 @Configuration
 public class KafkaConfig {
+
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
 
@@ -45,12 +46,16 @@ public class KafkaConfig {
         config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        // Transcription can take several minutes for long videos — keep the consumer
+        // in the group long enough to finish without triggering a rebalance.
+        config.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 30 * 60 * 1000); // 30 min
         return new DefaultKafkaConsumerFactory<>(config);
     }
 
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory() {
-        ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        ConcurrentKafkaListenerContainerFactory<String, String> factory =
+            new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
         return factory;
     }

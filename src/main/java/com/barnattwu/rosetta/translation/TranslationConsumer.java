@@ -33,24 +33,24 @@ public class TranslationConsumer {
 
   @KafkaListener(topics = "job.transcribed", groupId = "translation-service")
   public void onJobTranscribed(String jobId) {
-    Job job = jobRepository
-      .findById(UUID.fromString(jobId))
-      .orElseThrow(() -> new RuntimeException("Job not found: " + jobId));
-
+    Job job = null;
     try {
-      String transcript = redisTemplate
-        .opsForValue()
-        .get("transcript:" + jobId);
+      job = jobRepository
+        .findById(UUID.fromString(jobId))
+        .orElseThrow(() -> new RuntimeException("Job not found: " + jobId));
+      String transcript = redisTemplate.opsForValue().get("transcript:" + jobId);
       if (transcript == null) {
-        throw new RuntimeException(
-          "Transcript not found in Redis for job: " + jobId
-        );
+        throw new RuntimeException("Transcript not found in Redis for job: " + jobId);
       }
+
+      if (!jobRepository.existsById(job.getId())) return; // deleted while translating
 
       job.setStatus(JobStatus.CAPTIONING);
       jobRepository.save(job);
 
-      translationService.translate(job, transcript);
+      for (String targetLanguage : job.getTargetLanguages()) {
+        translationService.translate(job, transcript, targetLanguage);
+      }
 
       redisTemplate.delete("transcript:" + jobId);
 
@@ -60,6 +60,8 @@ public class TranslationConsumer {
 
       jobEventPublisher.publishJobCompleted(job.getId());
     } catch (Exception e) {
+      if (job == null) return;
+      if (!jobRepository.existsById(job.getId())) return;
       job.setStatus(JobStatus.FAILED);
       job.setErrorMessage(e.getMessage());
       jobRepository.save(job);

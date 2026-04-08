@@ -14,17 +14,11 @@ public class CaptionService {
   private final CaptionRepository captionRepository;
   private final JobRepository jobRepository;
 
-  public CaptionService(
-    CaptionRepository captionRepository,
-    JobRepository jobRepository
-  ) {
+  public CaptionService(CaptionRepository captionRepository, JobRepository jobRepository) {
     this.captionRepository = captionRepository;
     this.jobRepository = jobRepository;
   }
 
-  /* 
-    Primarly used for authorization - ensuring the job exists and belongs to the user making the request
-  */
   private Job getJobForUser(UUID jobId, UUID userId) {
     Job job = jobRepository
       .findById(jobId)
@@ -35,36 +29,34 @@ public class CaptionService {
     return job;
   }
 
-  public List<Caption> getCaptions(UUID jobId, UUID userId) {
+  public List<Caption> getCaptions(UUID jobId, UUID userId, String language) {
     getJobForUser(jobId, userId);
-    return captionRepository.findByJobIdOrderByIndex(jobId);
+    return captionRepository.findByJobIdAndLanguageOrderByIndex(jobId, language);
   }
 
-  public Caption updateCaption(UUID jobId,UUID captionId, UUID userId, String editedText) {
+  public Caption updateCaption(UUID jobId, UUID captionId, UUID userId, String editedText) {
     getJobForUser(jobId, userId);
     Caption caption = captionRepository
       .findById(captionId)
       .orElseThrow(() -> new RuntimeException("Caption not found"));
-
     caption.setEditedText(editedText);
     return captionRepository.save(caption);
   }
 
-  public String exportSrt(UUID jobId, UUID userId) {
+  public String exportSrt(UUID jobId, UUID userId, String language) {
     getJobForUser(jobId, userId);
-    List<Caption> captions = captionRepository.findByJobIdOrderByIndex(jobId);
+    List<Caption> captions = captionRepository.findByJobIdAndLanguageOrderByIndex(jobId, language);
     StringBuilder srt = new StringBuilder();
 
     for (Caption caption : captions) {
       String text = caption.getEditedText() != null
         ? caption.getEditedText()
-        : caption.getOriginalText();
+        : caption.getTranslatedText();
       srt.append(caption.getIndex() + 1).append("\n");
-      srt
-        .append(formatTime(caption.getStartTime()))
-        .append(" --> ")
-        .append(formatTime(caption.getEndTime()))
-        .append("\n");
+      srt.append(formatTime(caption.getStartTime()))
+         .append(" --> ")
+         .append(formatTime(caption.getEndTime()))
+         .append("\n");
       srt.append(text).append("\n\n");
     }
 
@@ -76,13 +68,6 @@ public class CaptionService {
     long minutes = (ms % 3600000) / 60000;
     long seconds = (ms % 60000) / 1000;
     long milliseconds = ms % 1000;
-
-    return String.format(
-      "%02d:%02d:%02d,%03d",
-      hours,
-      minutes,
-      seconds,
-      milliseconds
-    );
+    return String.format("%02d:%02d:%02d,%03d", hours, minutes, seconds, milliseconds);
   }
 }

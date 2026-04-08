@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -26,10 +27,11 @@ public class CaptionController {
   @GetMapping
   public ResponseEntity<List<Caption>> getCaptions(
     @PathVariable UUID jobId,
+    @RequestParam String language,
     Authentication auth
   ) {
     UUID userId = (UUID) auth.getPrincipal();
-    return ResponseEntity.ok(captionService.getCaptions(jobId, userId));
+    return ResponseEntity.ok(captionService.getCaptions(jobId, userId, language));
   }
 
   @PatchMapping("/{captionId}")
@@ -40,21 +42,19 @@ public class CaptionController {
     Authentication auth
   ) {
     UUID userId = (UUID) auth.getPrincipal();
-    return ResponseEntity.ok(
-      captionService.updateCaption(jobId, captionId, userId, request.editedText())
-    );
+    return ResponseEntity.ok(captionService.updateCaption(jobId, captionId, userId, request.editedText()));
   }
 
   @GetMapping("/export/srt")
-  public ResponseEntity<String> exportSrt(@PathVariable UUID jobId, Authentication auth) {
+  public ResponseEntity<String> exportSrt(
+    @PathVariable UUID jobId,
+    @RequestParam String language,
+    Authentication auth
+  ) {
     UUID userId = (UUID) auth.getPrincipal();
-    String srt = captionService.exportSrt(jobId, userId);
-    return ResponseEntity
-      .ok()
-      .header(
-        HttpHeaders.CONTENT_DISPOSITION,
-        "attachment; filename=\"captions.srt\""
-      )
+    String srt = captionService.exportSrt(jobId, userId, language);
+    return ResponseEntity.ok()
+      .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"captions.srt\"")
       .header(HttpHeaders.CONTENT_TYPE, "text/plain; charset=UTF-8")
       .body(srt);
   }

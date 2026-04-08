@@ -8,5 +8,6 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface JobRepository extends JpaRepository<Job, UUID> {
-    List<Job> findByUserId(UUID userId);
+    List<Job> findByUserIdOrderByCreatedAtDesc(UUID userId);
+    List<Job> findByStatusIn(List<JobStatus> statuses);
 }

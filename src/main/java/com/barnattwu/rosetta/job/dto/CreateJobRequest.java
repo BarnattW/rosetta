@@ -1,31 +1,18 @@
 package com.barnattwu.rosetta.job.dto;
 
+import java.util.List;
+
 public class CreateJobRequest {
     private String sourceLanguage;
-    private String targetLanguage;
-    private String filename;
+    private List<String> targetLanguages;
+    private String fileName;
 
-    public String getSourceLanguage() {
-        return sourceLanguage;
-    }
+    public String getSourceLanguage() { return sourceLanguage; }
+    public void setSourceLanguage(String sourceLanguage) { this.sourceLanguage = sourceLanguage; }
 
-    public void setSourceLanguage(String sourceLanguage) {
-        this.sourceLanguage = sourceLanguage;
-    }
+    public List<String> getTargetLanguages() { return targetLanguages; }
+    public void setTargetLanguages(List<String> targetLanguages) { this.targetLanguages = targetLanguages; }
 
-    public String getTargetLanguage() {
-        return targetLanguage;
-    }
-
-    public void setTargetLanguage(String targetLanguage) {
-        this.targetLanguage = targetLanguage;
-    }
-
-    public String getFilename() {
-        return filename;
-    }
-
-    public void setFilename(String filename) {
-        this.filename = filename;
-    }
+    public String getFileName() { return fileName; }
+    public void setFileName(String fileName) { this.fileName = fileName; }
 }

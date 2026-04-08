@@ -8,14 +8,16 @@ export interface Caption {
   originalText: string
   translatedText: string
   editedText: string | null
+  language: string
 }
 
 export const captionsApi = {
-  list: (jobId: string) => api.get<Caption[]>(`/api/jobs/${jobId}/captions`),
+  list: (jobId: string, language: string) =>
+    api.get<Caption[]>(`/api/jobs/${jobId}/captions?language=${encodeURIComponent(language)}`),
 
   update: (jobId: string, captionId: string, editedText: string) =>
     api.patch<Caption>(`/api/jobs/${jobId}/captions/${captionId}`, { editedText }),
 
-  exportSrt: (jobId: string) =>
-    api.get<string>(`/api/jobs/${jobId}/captions/export/srt`),
+  exportSrt: (jobId: string, language: string) =>
+    api.get<string>(`/api/jobs/${jobId}/captions/export/srt?language=${encodeURIComponent(language)}`),
 }

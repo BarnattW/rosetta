@@ -46,63 +46,32 @@ public class Caption {
   @Column(columnDefinition = "TEXT")
   private String editedText;
 
-  public UUID getId() {
-    return id;
-  }
+  @Column(nullable = false)
+  private String language;
 
-  public Job getJob() {
-    return job;
-  }
+  public UUID getId() { return id; }
 
-  public void setJob(Job job) {
-    this.job = job;
-  }
+  public Job getJob() { return job; }
+  public void setJob(Job job) { this.job = job; }
 
-  public int getIndex() {
-    return index;
-  }
+  public int getIndex() { return index; }
+  public void setIndex(int index) { this.index = index; }
 
-  public void setIndex(int index) {
-    this.index = index;
-  }
+  public long getStartTime() { return startTime; }
+  public void setStartTime(long startTime) { this.startTime = startTime; }
 
-  public long getStartTime() {
-    return startTime;
-  }
+  public long getEndTime() { return endTime; }
+  public void setEndTime(long endTime) { this.endTime = endTime; }
 
-  public void setStartTime(long startTime) {
-    this.startTime = startTime;
-  }
+  public String getOriginalText() { return originalText; }
+  public void setOriginalText(String originalText) { this.originalText = originalText; }
 
-  public long getEndTime() {
-    return endTime;
-  }
+  public String getTranslatedText() { return translatedText; }
+  public void setTranslatedText(String translatedText) { this.translatedText = translatedText; }
 
-  public void setEndTime(long endTime) {
-    this.endTime = endTime;
-  }
+  public String getEditedText() { return editedText; }
+  public void setEditedText(String editedText) { this.editedText = editedText; }
 
-  public String getOriginalText() {
-    return originalText;
-  }
-
-  public void setOriginalText(String originalText) {
-    this.originalText = originalText;
-  }
-
-  public String getTranslatedText() {
-    return translatedText;
-  }
-
-  public void setTranslatedText(String translatedText) {
-    this.translatedText = translatedText;
-  }
-
-  public String getEditedText() {
-    return editedText;
-  }
-
-  public void setEditedText(String editedText) {
-    this.editedText = editedText;
-  }
+  public String getLanguage() { return language; }
+  public void setLanguage(String language) { this.language = language; }
 }
