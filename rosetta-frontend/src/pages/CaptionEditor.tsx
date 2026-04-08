@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useCaptions, useUpdateCaption, useExportSrt } from '../hooks/useCaptions'
 import { useVideoUrl, useJob } from '../hooks/useJobs'
@@ -72,9 +72,7 @@ function downloadFile(content: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-// ─── char count limit (broadcast standard: 42 chars / line) ──────────────────
-const CHAR_WARN = 42
-const CHAR_MAX  = 84
+const CHAR_MAX = 300
 
 // ─── component ───────────────────────────────────────────────────────────────
 
@@ -90,6 +88,7 @@ export default function CaptionEditor() {
   const [duration, setDuration] = useState(0)
   const [scrubbing, setScrubbing] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
+  const [zoom, setZoom] = useState(1)
 
   const videoRef    = useRef<HTMLVideoElement>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -98,14 +97,23 @@ export default function CaptionEditor() {
 
   const { data: job }      = useJob(jobId!)
   const { data: videoUrl } = useVideoUrl(jobId!)
-  const { data: captions, isLoading } = useCaptions(jobId!, selectedLanguage)
-  const { mutate: saveCaption, isPending: saving } = useUpdateCaption(jobId!, selectedLanguage)
-  const { refetch: fetchSrt } = useExportSrt(jobId!, selectedLanguage)
 
-  const languages   = job?.targetLanguages ?? []
-  const currentMs   = currentTime * 1000
-  const progressPct = duration ? (currentTime / duration) * 100 : 0
+  const languages      = useMemo(() => job?.targetLanguages ?? [], [job])
+  const activeLanguage = selectedLanguage || languages[0] || ''
 
+  const { data: captions, isLoading } = useCaptions(jobId!, activeLanguage)
+  const { mutate: saveCaption, isPending: saving } = useUpdateCaption(jobId!, activeLanguage)
+  const { refetch: fetchSrt } = useExportSrt(jobId!, activeLanguage)
+
+  const visibleDuration = duration > 0 ? duration / zoom : 0
+  const viewStart       = duration > 0 && zoom > 1
+    ? Math.max(0, Math.min(currentTime - visibleDuration / 2, duration - visibleDuration))
+    : 0
+  const progressPct = visibleDuration > 0
+    ? Math.max(0, Math.min(100, ((currentTime - viewStart) / visibleDuration) * 100))
+    : 0
+
+  const currentMs     = currentTime * 1000
   const activeCaption = captions?.find(c => currentMs >= c.startTime && currentMs < c.endTime)
 
   const filteredCaptions = captions?.filter(c => {
@@ -117,11 +125,6 @@ export default function CaptionEditor() {
   })
 
   const dirtyCount = Object.keys(editing).length
-
-  // Set initial language
-  useEffect(() => {
-    if (languages.length && !selectedLanguage) setSelectedLanguage(languages[0])
-  }, [languages, selectedLanguage])
 
   // Auto-scroll caption list
   useEffect(() => {
@@ -155,11 +158,12 @@ export default function CaptionEditor() {
   // ─── scrubbing ──────────────────────────────────────────────────────────────
   const seekToPosition = useCallback((clientX: number) => {
     if (!timelineRef.current || !videoRef.current || !duration) return
-    const rect  = timelineRef.current.getBoundingClientRect()
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-    videoRef.current.currentTime = ratio * duration
-    setCurrentTime(ratio * duration)
-  }, [duration])
+    const rect     = timelineRef.current.getBoundingClientRect()
+    const ratio    = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    const seekTime = viewStart + ratio * visibleDuration
+    videoRef.current.currentTime = seekTime
+    setCurrentTime(seekTime)
+  }, [duration, viewStart, visibleDuration])
 
   useEffect(() => {
     if (!scrubbing) return
@@ -208,11 +212,11 @@ export default function CaptionEditor() {
     if (!captions) return
     if (format === 'SRT') {
       const { data: srt } = await fetchSrt()
-      if (srt) downloadFile(srt, `captions-${selectedLanguage}.srt`)
+      if (srt) downloadFile(srt, `captions-${activeLanguage}.srt`)
       return
     }
     const content = format === 'VTT' ? buildVtt(captions, getText) : buildAss(captions, getText)
-    downloadFile(content, `captions-${selectedLanguage}.${format.toLowerCase()}`)
+    downloadFile(content, `captions-${activeLanguage}.${format.toLowerCase()}`)
   }
 
   // ─── render ─────────────────────────────────────────────────────────────────
@@ -317,7 +321,7 @@ export default function CaptionEditor() {
                     key={lang}
                     onClick={() => { setSelectedLanguage(lang); setEditing({}) }}
                     className={`px-3 py-1 rounded-md text-xs font-medium transition-colors
-                      ${selectedLanguage === lang
+                      ${activeLanguage === lang
                         ? 'bg-indigo-500 text-white'
                         : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
                       }`}
@@ -334,16 +338,32 @@ export default function CaptionEditor() {
             <div className="shrink-0 bg-zinc-900 border-t border-zinc-800 px-4 py-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-mono text-zinc-500">{fmtDisplay(currentTime * 1000)}</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setZoom(z => Math.max(1, z / 2))}
+                    disabled={zoom === 1}
+                    className="w-5 h-5 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-default transition-colors text-sm leading-none"
+                  >−</button>
+                  <span className="text-xs font-mono text-zinc-500 w-7 text-center">{zoom}×</span>
+                  <button
+                    onClick={() => setZoom(z => Math.min(16, z * 2))}
+                    disabled={zoom === 16}
+                    className="w-5 h-5 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-default transition-colors text-sm leading-none"
+                  >+</button>
+                </div>
                 <span className="text-xs font-mono text-zinc-600">{fmtDisplay(duration * 1000)}</span>
               </div>
               <div
                 ref={timelineRef}
-                className="relative h-8 bg-zinc-800 rounded cursor-pointer select-none"
+                className="relative h-8 bg-zinc-800 rounded cursor-pointer select-none overflow-hidden"
                 onMouseDown={e => { setScrubbing(true); seekToPosition(e.clientX) }}
               >
                 {captions.map(c => {
-                  const left  = (c.startTime / 1000 / duration) * 100
-                  const width = ((c.endTime - c.startTime) / 1000 / duration) * 100
+                  const cStart = c.startTime / 1000
+                  const cEnd   = c.endTime / 1000
+                  if (cEnd < viewStart || cStart > viewStart + visibleDuration) return null
+                  const left  = ((cStart - viewStart) / visibleDuration) * 100
+                  const width = ((cEnd - cStart) / visibleDuration) * 100
                   return (
                     <div
                       key={c.id}
@@ -417,12 +437,10 @@ export default function CaptionEditor() {
               <p className="text-xs text-zinc-600 p-4">No captions match "{search}"</p>
             ) : (
               filteredCaptions?.map(c => {
-                const isActive  = activeCaption?.id === c.id
-                const text      = getText(c)
-                const isDirty   = editing[c.id] !== undefined
-                const charCount = text.length
-                const overWarn  = charCount > CHAR_WARN
-                const overMax   = charCount > CHAR_MAX
+                const isActive = activeCaption?.id === c.id
+                const text     = getText(c)
+                const isDirty  = editing[c.id] !== undefined
+                const overMax  = text.length > CHAR_MAX
 
                 return (
                   <div
@@ -465,19 +483,8 @@ export default function CaptionEditor() {
                       rows={2}
                       className={`w-full text-sm bg-zinc-800 rounded-lg px-2.5 py-1.5 outline-none resize-none text-white
                         placeholder:text-zinc-600 transition-colors border
-                        ${isDirty
-                          ? overMax ? 'border-red-500' : 'border-amber-500/60'
-                          : 'border-zinc-700 focus:border-indigo-500'
-                        }`}
+                        ${overMax ? 'border-red-500' : isDirty ? 'border-amber-500/60' : 'border-zinc-700 focus:border-indigo-500'}`}
                     />
-
-                    {/* Char count */}
-                    <div className="flex justify-end mt-1">
-                      <span className={`text-[10px] tabular-nums transition-colors
-                        ${overMax ? 'text-red-400' : overWarn ? 'text-amber-400' : 'text-zinc-700'}`}>
-                        {charCount}{overWarn ? `/${CHAR_MAX}` : ''}
-                      </span>
-                    </div>
                   </div>
                 )
               })

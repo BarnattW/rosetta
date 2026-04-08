@@ -54,7 +54,7 @@ public class StorageService {
             .build();
 
         PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
-            .signatureDuration(Duration.ofMinutes(15))
+            .signatureDuration(Duration.ofMinutes(60))
             .putObjectRequest(putObjectRequest)
             .build();
 

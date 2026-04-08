@@ -1,14 +1,17 @@
 package com.barnattwu.rosetta.translation;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.barnattwu.rosetta.caption.Caption;
 import com.barnattwu.rosetta.caption.CaptionRepository;
 import com.barnattwu.rosetta.job.Job;
 import com.barnattwu.rosetta.transcription.TranscriptionService.TranscriptionSegment;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openai.client.OpenAIClient;
 import com.openai.models.ChatModel;
@@ -16,6 +19,11 @@ import com.openai.models.chat.completions.ChatCompletionCreateParams;
 
 @Service
 public class TranslationService {
+
+  private static final Logger log = LoggerFactory.getLogger(TranslationService.class);
+  private static final int CHUNK_SIZE = 50;
+  private static final ObjectMapper MAPPER = new ObjectMapper()
+      .configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true);
 
   private final OpenAIClient openAIClient;
   private final CaptionRepository captionRepository;
@@ -25,82 +33,98 @@ public class TranslationService {
     this.captionRepository = captionRepository;
   }
 
-  public void translate(Job job, String segmentsJson, String targetLanguage) {
-    ObjectMapper mapper = new ObjectMapper();
-    List<TranscriptionSegment> segments;
+  // Structured response types — the SDK enforces these at the API level,
+  // eliminating all JSON parsing variability.
+  public static class TranslationItem {
+    public int index;
+    public String translatedText;
+  }
 
+  public static class TranslationResponse {
+    public List<TranslationItem> translations;
+  }
+
+  public void translate(Job job, String segmentsJson, String targetLanguage) {
+    List<TranscriptionSegment> segments;
     try {
-      segments = mapper.readValue(
+      segments = MAPPER.readValue(
         segmentsJson,
-        mapper.getTypeFactory().constructCollectionType(List.class, TranscriptionSegment.class)
+        MAPPER.getTypeFactory().constructCollectionType(List.class, TranscriptionSegment.class)
       );
     } catch (Exception e) {
       throw new RuntimeException("Failed to parse transcription segments: " + e.getMessage(), e);
     }
 
+    log.info("[translation] translating {} segments -> {} in chunks of {}", segments.size(), targetLanguage, CHUNK_SIZE);
+
+    List<Caption> allCaptions = new ArrayList<>();
+    int totalChunks = (int) Math.ceil((double) segments.size() / CHUNK_SIZE);
+    for (int i = 0; i < segments.size(); i += CHUNK_SIZE) {
+      List<TranscriptionSegment> chunk = segments.subList(i, Math.min(i + CHUNK_SIZE, segments.size()));
+      log.info("[translation] chunk {}/{} ({} segments)", (i / CHUNK_SIZE) + 1, totalChunks, chunk.size());
+      allCaptions.addAll(translateChunk(job, chunk, targetLanguage));
+    }
+
+    captionRepository.deleteByJobIdAndLanguage(job.getId(), targetLanguage);
+    captionRepository.saveAll(allCaptions);
+  }
+
+  private List<Caption> translateChunk(Job job, List<TranscriptionSegment> chunk, String targetLanguage) {
+    String segmentList = java.util.stream.IntStream.range(0, chunk.size())
+        .mapToObj(i -> "[%d] (%.1fs-%.1fs): %s".formatted(
+            i,
+            chunk.get(i).startTime() / 1000.0,
+            chunk.get(i).endTime() / 1000.0,
+            chunk.get(i).text()
+        ))
+        .collect(java.util.stream.Collectors.joining("\n"));
+
     String prompt = """
         You are a professional subtitle translator. Translate each segment from %s to %s.
-        Preserve the natural tone and meaning. Each segment is a caption from a video — keep translations concise and natural for on-screen reading.
-        Return ONLY a JSON array in this exact format, no other text:
-        [
-          {"index": 0, "translatedText": "..."},
-          {"index": 1, "translatedText": "..."}
-        ]
+        Keep translations concise and natural for on-screen reading.
+        You must return a translation for every segment. The response must contain exactly %d items.
 
         Segments:
         %s
-        """.formatted(
-        job.getSourceLanguage(),
-        targetLanguage,
-        segments.stream()
-          .map(s -> "[%d] (%.1fs - %.1fs): %s".formatted(
-              s.index(),
-              s.startTime() / 1000.0,
-              s.endTime() / 1000.0,
-              s.text()
-          ))
-          .reduce("", (a, b) -> a + "\n" + b)
-    );
+        """.formatted(job.getSourceLanguage(), targetLanguage, chunk.size(), segmentList);
 
-    ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
-      .model(ChatModel.GPT_4O)
-      .addUserMessage(prompt)
-      .build();
+    var params = ChatCompletionCreateParams.builder()
+        .model(ChatModel.GPT_4O)
+        .responseFormat(TranslationResponse.class)
+        .addUserMessage(prompt)
+        .build();
 
-    String response = openAIClient.chat().completions().create(params)
-      .choices().get(0).message().content().orElseThrow();
+    TranslationResponse result = openAIClient.chat().completions().create(params)
+        .choices().get(0).message().content().orElseThrow(() ->
+            new RuntimeException("Structured output returned empty content"));
 
-    String cleaned = response.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
-
-    try {
-      List<JsonNode> translations = mapper.readValue(
-        cleaned,
-        mapper.getTypeFactory().constructCollectionType(List.class, JsonNode.class)
-      );
-
-      List<Caption> captions = segments.stream().map(seg -> {
-        String translatedText = translations.stream()
-          .filter(t -> t.get("index").asInt() == seg.index())
-          .findFirst()
-          .map(t -> t.get("translatedText").asText())
-          .orElse(seg.text());
-
-        Caption caption = new Caption();
-        caption.setJob(job);
-        caption.setIndex(seg.index());
-        caption.setStartTime(seg.startTime());
-        caption.setEndTime(seg.endTime());
-        caption.setOriginalText(seg.text());
-        caption.setTranslatedText(translatedText);
-        caption.setLanguage(targetLanguage);
-        return caption;
-      }).toList();
-
-      // Delete any partial captions from a previous interrupted attempt before inserting
-      captionRepository.deleteByJobIdAndLanguage(job.getId(), targetLanguage);
-      captionRepository.saveAll(captions);
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to parse translation response: " + e.getMessage(), e);
+    if (result.translations == null || result.translations.isEmpty()) {
+      throw new RuntimeException("GPT returned no translations for chunk of " + chunk.size() + " segments");
     }
+
+    log.info("[translation] received {} translations for chunk of {}", result.translations.size(), chunk.size());
+
+    List<Caption> captions = new ArrayList<>();
+    for (int i = 0; i < chunk.size(); i++) {
+      TranscriptionSegment seg = chunk.get(i);
+      String translatedText = (i < result.translations.size() && result.translations.get(i).translatedText != null)
+          ? result.translations.get(i).translatedText
+          : seg.text();
+
+      if (translatedText.equals(seg.text())) {
+        log.warn("[translation] segment {} fell back to original text (chunk position {})", seg.index(), i);
+      }
+
+      Caption caption = new Caption();
+      caption.setJob(job);
+      caption.setIndex(seg.index());
+      caption.setStartTime(seg.startTime());
+      caption.setEndTime(seg.endTime());
+      caption.setOriginalText(seg.text());
+      caption.setTranslatedText(translatedText);
+      caption.setLanguage(targetLanguage);
+      captions.add(caption);
+    }
+    return captions;
   }
 }
